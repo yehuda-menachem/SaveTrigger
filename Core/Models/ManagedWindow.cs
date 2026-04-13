@@ -9,8 +9,11 @@ public sealed class ManagedWindow
     /// <summary>Win32 window handle (HWND).</summary>
     public nint Hwnd { get; set; }
 
-    /// <summary>The folder path this window is showing.</summary>
-    public required string FolderPath { get; init; }
+    /// <summary>
+    /// The folder path this window is currently showing.
+    /// Mutable so it can be updated when a new tab is opened in the same window.
+    /// </summary>
+    public required string FolderPath { get; set; }
 
     /// <summary>UTC time when the app opened this window.</summary>
     public DateTime OpenedAt { get; init; }

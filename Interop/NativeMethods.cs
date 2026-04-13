@@ -47,11 +47,25 @@ internal static class NativeMethods
     internal const uint SWP_SHOWWINDOW     = 0x0040;
     internal const uint SWP_ASYNCWINDOWPOS = 0x4000;
 
-    // ── Show window ──────────────────────────────────────────────────────────
+    // ── Show / focus window ──────────────────────────────────────────────────
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static extern bool ShowWindow(nint hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool BringWindowToTop(nint hWnd);
+
+    /// <summary>
+    /// Attaches the message queue of thread idAttach to idAttachTo.
+    /// Required for SetForegroundWindow to work from a background process:
+    /// attach to the current foreground thread, call SetForegroundWindow, then detach.
+    /// </summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool AttachThreadInput(uint idAttach, uint idAttachTo,
+        [MarshalAs(UnmanagedType.Bool)] bool fAttach);
 
     internal const int SW_RESTORE  = 9;
     internal const int SW_SHOW     = 5;
@@ -153,6 +167,65 @@ internal static class NativeMethods
 
     [DllImport("kernel32.dll")]
     internal static extern uint GetCurrentThreadId();
+
+    // ── SendInput (keyboard simulation) ──────────────────────────────────────
+    // Used to send Ctrl+T / Ctrl+Shift+Tab to Explorer for tab management.
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct KEYBDINPUT
+    {
+        public ushort wVk;
+        public ushort wScan;
+        public uint   dwFlags;
+        public uint   time;
+        public nint   dwExtraInfo;
+    }
+
+    // INPUT must be exactly 40 bytes on 64-bit Windows.
+    // Layout: type(4) + padding(4) + union(32). KEYBDINPUT starts at offset 8.
+    [StructLayout(LayoutKind.Explicit, Size = 40)]
+    internal struct INPUT
+    {
+        [FieldOffset(0)] public uint       type;
+        [FieldOffset(8)] public KEYBDINPUT ki;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    internal static extern uint SendInput(uint nInputs,
+        [In] INPUT[] pInputs, int cbSize);
+
+    internal const uint   INPUT_KEYBOARD   = 1;
+    internal const uint   KEYEVENTF_KEYUP  = 0x0002;
+    internal const ushort VK_CONTROL       = 0x11;
+    internal const ushort VK_SHIFT         = 0x10;
+    internal const ushort VK_TAB           = 0x09;
+    internal const ushort VK_T             = 0x54;
+    internal const ushort VK_W             = 0x57;
+
+    /// <summary>
+    /// Sends a keyboard shortcut (optional Ctrl + optional Shift + key) via SendInput.
+    /// The window must be in the foreground for SendInput to target it correctly.
+    /// </summary>
+    internal static void SendKeyCombo(ushort key, bool ctrl = false, bool shift = false)
+    {
+        var list = new System.Collections.Generic.List<INPUT>(6);
+
+        if (ctrl)  list.Add(MakeKey(VK_CONTROL, false));
+        if (shift) list.Add(MakeKey(VK_SHIFT,   false));
+        list.Add(MakeKey(key, false));
+        list.Add(MakeKey(key, true));
+        if (shift) list.Add(MakeKey(VK_SHIFT,   true));
+        if (ctrl)  list.Add(MakeKey(VK_CONTROL, true));
+
+        var arr = list.ToArray();
+        SendInput((uint)arr.Length, arr, System.Runtime.InteropServices.Marshal.SizeOf<INPUT>());
+    }
+
+    private static INPUT MakeKey(ushort vk, bool keyUp) => new INPUT
+    {
+        type = INPUT_KEYBOARD,
+        ki   = new KEYBDINPUT { wVk = vk, dwFlags = keyUp ? KEYEVENTF_KEYUP : 0u }
+    };
 
     // ── Drive type ───────────────────────────────────────────────────────────
 
