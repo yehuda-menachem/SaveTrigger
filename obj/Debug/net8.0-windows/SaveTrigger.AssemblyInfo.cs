@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("SaveTrigger")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+78a155745d77be5f1d4862c65577a743848838a3")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+355d26ba30903e89bf5ff647ea49550eb9ca3229")]
 [assembly: System.Reflection.AssemblyProductAttribute("SaveTrigger")]
 [assembly: System.Reflection.AssemblyTitleAttribute("SaveTrigger")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
