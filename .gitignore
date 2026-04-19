@@ -79,3 +79,6 @@ Output/
 
 # Custom Excludes
 .claude/
+
+# Publish output
+publish/
