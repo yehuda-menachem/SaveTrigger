@@ -29,8 +29,7 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir=installer
 OutputBaseFilename=SaveTrigger-Setup-{#AppVersion}
-; Uncomment after converting logo.svg to logo.ico:
-; SetupIconFile=logo.ico
+SetupIconFile=logo.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -39,8 +38,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayName={#AppName}
-; Uncomment after creating logo.ico:
-; UninstallDisplayIcon={app}\{#AppExeName}
+UninstallDisplayIcon={app}\{#AppExeName}
 CloseApplications=yes
 CloseApplicationsFilter=*{#AppExeName}
 RestartApplications=no
