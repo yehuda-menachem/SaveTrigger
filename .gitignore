@@ -82,3 +82,6 @@ Output/
 
 # Publish output
 publish/
+
+# Local settings
+appsettings.json
