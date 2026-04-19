@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <!-- Radar green palette -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   style="stop-color:#0a1a0f"/>
+      <stop offset="100%" style="stop-color:#020a04"/>
+    </radialGradient>
+
+    <radialGradient id="sweepGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   style="stop-color:#00ff6a;stop-opacity:0.18"/>
+      <stop offset="100%" style="stop-color:#00ff6a;stop-opacity:0"/>
+    </radialGradient>
+
+    <!-- Sweep wedge gradient -->
+    <linearGradient id="sweepColor" x1="50%" y1="50%" x2="100%" y2="0%">
+      <stop offset="0%"   style="stop-color:#00ff6a;stop-opacity:0.55"/>
+      <stop offset="100%" style="stop-color:#00ff6a;stop-opacity:0"/>
+    </linearGradient>
+
+    <filter id="ringGlow">
+      <feGaussianBlur stdDeviation="1.8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <filter id="dotGlow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <filter id="outerShadow">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000" flood-opacity="0.6"/>
+    </filter>
+
+    <!-- Clip to circle -->
+    <clipPath id="circleClip">
+      <circle cx="100" cy="100" r="93"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="97" fill="url(#bgGrad)" filter="url(#outerShadow)"/>
+  <circle cx="100" cy="100" r="97" fill="url(#sweepGrad)"/>
+
+  <g clip-path="url(#circleClip)">
+    <!-- Radar sweep wedge (approx 60° arc toward top-right) -->
+    <path d="M100,100 L178,28 A93,93 0 0,0 130,16 Z"
+          fill="url(#sweepColor)" opacity="0.6"/>
+
+    <!-- Concentric radar rings -->
+    <g filter="url(#ringGlow)">
+      <circle cx="100" cy="100" r="72" fill="none" stroke="#00cc55" stroke-width="0.8" opacity="0.5"/>
+      <circle cx="100" cy="100" r="52" fill="none" stroke="#00cc55" stroke-width="0.8" opacity="0.55"/>
+      <circle cx="100" cy="100" r="32" fill="none" stroke="#00cc55" stroke-width="0.8" opacity="0.6"/>
+      <circle cx="100" cy="100" r="14" fill="none" stroke="#00cc55" stroke-width="0.8" opacity="0.6"/>
+    </g>
+
+    <!-- Crosshair lines -->
+    <line x1="7"   y1="100" x2="193" y2="100" stroke="#00cc55" stroke-width="0.6" opacity="0.25"/>
+    <line x1="100" y1="7"   x2="100" y2="193" stroke="#00cc55" stroke-width="0.6" opacity="0.25"/>
+
+    <!-- Sweep arm line -->
+    <line x1="100" y1="100" x2="178" y2="28"
+          stroke="#00ff6a" stroke-width="1.2" opacity="0.7"/>
+
+    <!-- Detected ping dot — top right area -->
+    <g filter="url(#dotGlow)">
+      <circle cx="148" cy="56" r="5" fill="#00ff6a" opacity="0.95"/>
+      <circle cx="148" cy="56" r="9" fill="none" stroke="#00ff6a" stroke-width="1" opacity="0.4"/>
+    </g>
+
+    <!-- Second smaller ping -->
+    <g filter="url(#dotGlow)">
+      <circle cx="62" cy="72" r="3" fill="#00ff6a" opacity="0.5"/>
+    </g>
+
+    <!-- Center dot -->
+    <circle cx="100" cy="100" r="3.5" fill="#00ff6a" opacity="0.9"/>
+    <circle cx="100" cy="100" r="1.5" fill="#ffffff" opacity="0.8"/>
+  </g>
+
+  <!-- Outer border ring -->
+  <circle cx="100" cy="100" r="93" fill="none" stroke="#00cc55" stroke-width="1.2" opacity="0.35"/>
+  <circle cx="100" cy="100" r="96" fill="none" stroke="#00cc55" stroke-width="0.5" opacity="0.15"/>
+</svg>

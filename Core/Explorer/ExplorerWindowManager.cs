@@ -132,11 +132,11 @@ public sealed class ExplorerWindowManager
             // repositions itself after the window is first shown. We must wait
             // for that to complete before applying our target monitor position,
             // then repeat once more in case of a late second reposition.
-            Thread.Sleep(700);
+            Thread.Sleep(300);
             MoveToTargetMonitor(newHwnd);
             BringToFront(newHwnd);
 
-            Thread.Sleep(400);
+            Thread.Sleep(200);
             MoveToTargetMonitor(newHwnd);   // second pass — overrides any late reposition
             BringToFront(newHwnd);
         }
@@ -145,18 +145,15 @@ public sealed class ExplorerWindowManager
     // ── Tab support ──────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Opens <paramref name="folderPath"/> as a new background tab in the Explorer
-    /// window identified by <paramref name="existingHwnd"/>, leaving the currently
-    /// active tab unchanged.
+    /// Opens <paramref name="folderPath"/> as a new active tab in the Explorer
+    /// window identified by <paramref name="existingHwnd"/>.
     ///
-    /// Strategy (Navigate2 flags are unreliable for folder tabs in practice):
-    ///   1. Bring window to front (required for SendInput).
-    ///   2. Ctrl+T  — opens a new empty tab and makes it active.
-    ///   3. Navigate2(folderPath) — navigates the now-active new tab to the folder.
-    ///   4. Ctrl+Shift+Tab — returns focus to the tab that was active before step 2.
-    ///
-    /// The user sees their original tab, while the new folder is available in the
-    /// background tab.
+    /// Strategy:
+    ///   1. Snapshot LocationURLs of all existing tabs in this window (before).
+    ///   2. Bring window to front + Ctrl+T → new "Home" tab opens and becomes active.
+    ///   3. Re-enumerate tabs; identify the new one by URL exclusion from the snapshot.
+    ///   4. Navigate2(folderPath) on the new tab → shows the target folder.
+    ///   5. Leave focus on the new tab (no Ctrl+Shift+Tab back).
     /// </summary>
     private bool TryOpenAsNewTab(nint existingHwnd, string folderPath)
     {
@@ -165,90 +162,109 @@ public sealed class ExplorerWindowManager
             var shellType = Type.GetTypeFromProgID("Shell.Application", throwOnError: false);
             if (shellType == null) return false;
 
-            dynamic? shell = Activator.CreateInstance(shellType);
-            if (shell == null) return false;
+            // ── Snapshot BEFORE Ctrl+T ───────────────────────────────────────
+            var urlsBefore = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int countBefore = 0;
 
+            dynamic? shell1 = Activator.CreateInstance(shellType);
+            if (shell1 == null) return false;
             try
             {
-                dynamic windows = shell.Windows();
-                int count = windows.Count;
-
-                for (int i = 0; i < count; i++)
+                dynamic wins1 = shell1.Windows();
+                for (int i = 0, c = (int)wins1.Count; i < c; i++)
                 {
                     try
                     {
-                        dynamic? item = windows.Item(i);
+                        dynamic? item = wins1.Item(i);
                         if (item == null) continue;
-
-                        nint hwnd = (nint)(int)item.HWND;
-                        if (hwnd != existingHwnd) continue;
-
-                        // Step 1: Bring window to foreground — SendInput targets
-                        // whichever window has keyboard focus.
-                        BringToFront(existingHwnd);
-                        Thread.Sleep(150);
-
-                        // Step 2: Ctrl+T — new tab opens and becomes active.
-                        NativeMethods.SendKeyCombo(NativeMethods.VK_T, ctrl: true);
-                        Thread.Sleep(500); // wait for new tab to fully initialize
-
-                        // Step 3: Navigate the NEW active tab to the folder.
-                        //
-                        // IMPORTANT: `item` still points to the OLD tab's COM object.
-                        // Calling item.Navigate2 would overwrite the original tab's content.
-                        // After Ctrl+T, Shell.Application reports the *currently active* tab
-                        // for this HWND — re-enumerate with a fresh Shell instance to get
-                        // the new tab's COM object and navigate that one instead.
-                        bool navigated = false;
-                        dynamic? shell2 = Activator.CreateInstance(shellType);
-                        if (shell2 != null)
-                        {
-                            try
-                            {
-                                dynamic windows2 = shell2.Windows();
-                                for (int j = 0, c2 = (int)windows2.Count; j < c2; j++)
-                                {
-                                    try
-                                    {
-                                        dynamic? tab = windows2.Item(j);
-                                        if (tab == null) continue;
-                                        if ((nint)(int)tab.HWND != existingHwnd) continue;
-                                        // This is the new active tab — navigate it.
-                                        tab.Navigate2(folderPath, 0x02); // navNoHistory
-                                        navigated = true;
-                                        break;
-                                    }
-                                    catch { continue; }
-                                }
-                            }
-                            finally { Marshal.ReleaseComObject(shell2); }
-                        }
-
-                        if (!navigated)
-                        {
-                            _log.LogDebug("Re-enumerate for new tab failed — closing it and falling back");
-                            NativeMethods.SendKeyCombo(NativeMethods.VK_W, ctrl: true); // close empty tab
-                            return false;
-                        }
-
-                        Thread.Sleep(200);
-
-                        // Step 4: Ctrl+Shift+Tab — return to the tab that was active
-                        // before we opened the new one.
-                        NativeMethods.SendKeyCombo(NativeMethods.VK_TAB, ctrl: true, shift: true);
-
-                        _log.LogInformation(
-                            "Opened {Folder} as background tab in window 0x{Hwnd:X}",
-                            folderPath, existingHwnd);
-                        return true;
+                        if ((nint)(int)item.HWND != existingHwnd) continue;
+                        countBefore++;
+                        string? url = item.LocationURL;
+                        if (!string.IsNullOrEmpty(url)) urlsBefore.Add(url);
                     }
                     catch { continue; }
                 }
             }
-            finally
+            finally { Marshal.ReleaseComObject(shell1); }
+
+            _log.LogDebug("Tab snapshot before Ctrl+T: {Count} tabs in 0x{Hwnd:X}", countBefore, existingHwnd);
+
+            // ── Step 1+2: Focus + Ctrl+T ─────────────────────────────────────
+            BringToFront(existingHwnd);
+            Thread.Sleep(80);
+            NativeMethods.SendKeyCombo(NativeMethods.VK_T, ctrl: true);
+            Thread.Sleep(200);
+
+            // ── Step 3+4: Identify new tab and navigate it ───────────────────
+            // The new tab is the one whose LocationURL was NOT in the before-snapshot.
+            bool navigated = false;
+            dynamic? shell2 = Activator.CreateInstance(shellType);
+            if (shell2 != null)
             {
-                Marshal.ReleaseComObject(shell);
+                try
+                {
+                    dynamic wins2 = shell2.Windows();
+                    int countAfter = 0;
+                    dynamic? newTab = null;
+                    string? newTabUrl = null;
+
+                    for (int j = 0, c2 = (int)wins2.Count; j < c2; j++)
+                    {
+                        try
+                        {
+                            dynamic? tab = wins2.Item(j);
+                            if (tab == null) continue;
+                            if ((nint)(int)tab.HWND != existingHwnd) continue;
+                            countAfter++;
+
+                            string? url = tab.LocationURL;
+                            if (string.IsNullOrEmpty(url) || !urlsBefore.Contains(url))
+                            {
+                                newTab    = tab;
+                                newTabUrl = url;
+                            }
+                        }
+                        catch { continue; }
+                    }
+
+                    _log.LogDebug(
+                        "Tab snapshot after Ctrl+T: {After} tabs (expected {Expected}), new URL={Url}",
+                        countAfter, countBefore + 1, newTabUrl ?? "<null>");
+
+                    if (countAfter <= countBefore)
+                    {
+                        _log.LogDebug("Ctrl+T was not registered (window lost focus?) — falling back");
+                        return false;
+                    }
+
+                    if (newTab != null)
+                    {
+                        try
+                        {
+                            newTab.Navigate2(folderPath, 0);
+                            navigated = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            _log.LogDebug(ex, "Navigate2 failed on new tab");
+                        }
+                    }
+                }
+                finally { Marshal.ReleaseComObject(shell2); }
             }
+
+            if (!navigated)
+            {
+                _log.LogDebug("Re-enumerate for new tab failed — closing it and falling back");
+                NativeMethods.SendKeyCombo(NativeMethods.VK_W, ctrl: true);
+                return false;
+            }
+
+            Thread.Sleep(100);
+            // Focus stays on the new tab — no Ctrl+Shift+Tab back.
+
+            _log.LogInformation("Opened {Folder} as new tab in window 0x{Hwnd:X}", folderPath, existingHwnd);
+            return true;
         }
         catch (Exception ex)
         {
@@ -268,15 +284,15 @@ public sealed class ExplorerWindowManager
             UseShellExecute = false
         };
         Process.Start(psi);
-        Thread.Sleep(150); // let Explorer begin initializing
+        Thread.Sleep(50); // let Explorer begin initializing
     }
 
     private static nint FindNewExplorerHwnd(HashSet<nint> before, CancellationToken ct)
     {
-        for (int i = 0; i < 10; i++)   // up to ~2.5 s
+        for (int i = 0; i < 20; i++)   // up to ~1 s
         {
             ct.ThrowIfCancellationRequested();
-            Thread.Sleep(250);
+            Thread.Sleep(50);
 
             var current = EnumerateExplorerWindows();
             var newOnes = current.Except(before).ToList();

@@ -198,7 +198,10 @@ internal static class NativeMethods
     internal const uint   KEYEVENTF_KEYUP  = 0x0002;
     internal const ushort VK_CONTROL       = 0x11;
     internal const ushort VK_SHIFT         = 0x10;
+    internal const ushort VK_RETURN        = 0x0D;
     internal const ushort VK_TAB           = 0x09;
+    internal const ushort VK_F5            = 0x74;
+    internal const ushort VK_L             = 0x4C;
     internal const ushort VK_T             = 0x54;
     internal const ushort VK_W             = 0x57;
 

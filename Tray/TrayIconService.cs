@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using SaveTrigger.Interop;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace SaveTrigger.Tray;
@@ -179,9 +180,9 @@ public sealed class TrayIconService : IHostedService, IDisposable
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Creates a simple programmatic icon (white 'S' on a blue background) so
-    /// the app runs without an embedded .ico resource file.
-    /// Replace with a proper .ico file for production.
+    /// Creates a radar-style icon: concentric green rings on a dark circular background,
+    /// with a sweep arm and a ping dot — matching the app's radar logo aesthetic.
+    /// Transparent corners are preserved by embedding PNG inside the ICO stream.
     /// </summary>
     private static Icon CreateDefaultIcon()
     {
@@ -189,28 +190,92 @@ public sealed class TrayIconService : IHostedService, IDisposable
         {
             using var bmp = new Bitmap(32, 32, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             using var g   = Graphics.FromImage(bmp);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            g.Clear(Color.FromArgb(0, 120, 215));  // Windows blue
+            // Fully transparent canvas — corners stay transparent
+            g.Clear(Color.Transparent);
 
-            using var font  = new Font("Arial", 18, FontStyle.Bold, GraphicsUnit.Pixel);
-            using var brush = new SolidBrush(Color.White);
+            const float cx = 16f, cy = 16f;
+            const float radius = 15f;
 
-            var sf = new StringFormat
-            {
-                Alignment     = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center
-            };
-            g.DrawString("S", font, brush, new RectangleF(0, 0, 32, 32), sf);
+            // Circular dark background (clipped to circle)
+            using var bgPath = new GraphicsPath();
+            bgPath.AddEllipse(cx - radius, cy - radius, radius * 2, radius * 2);
+            g.SetClip(bgPath);
+            g.FillEllipse(new SolidBrush(Color.FromArgb(255, 10, 26, 15)), cx - radius, cy - radius, radius * 2, radius * 2);
 
-            // Convert Bitmap to Icon
-            var hIcon = bmp.GetHicon();
-            return Icon.FromHandle(hIcon);
+            // Sweep wedge (upper-right, ~65°)
+            g.FillPie(new SolidBrush(Color.FromArgb(50, 0, 220, 90)), 1, 1, 30, 30, -90f, -65f);
+
+            // Concentric rings
+            using var ringPen = new Pen(Color.FromArgb(150, 0, 200, 80), 0.8f);
+            foreach (float r in new[] { 13.5f, 9.5f, 5.5f })
+                g.DrawEllipse(ringPen, cx - r, cy - r, r * 2, r * 2);
+
+            // Crosshair lines
+            using var crossPen = new Pen(Color.FromArgb(55, 0, 200, 80), 0.5f);
+            g.DrawLine(crossPen, 2, cy, 30, cy);
+            g.DrawLine(crossPen, cx, 2, cx, 30);
+
+            // Sweep arm (toward upper-right ~45°)
+            using var sweepPen = new Pen(Color.FromArgb(210, 0, 255, 100), 1f);
+            g.DrawLine(sweepPen, cx, cy, 27f, 5f);
+
+            // Ping dot
+            using var pingBrush = new SolidBrush(Color.FromArgb(255, 0, 255, 110));
+            g.FillEllipse(pingBrush, 23f, 5.5f, 4f, 4f);
+
+            // Center dot
+            using var centerBrush = new SolidBrush(Color.FromArgb(230, 0, 255, 110));
+            g.FillEllipse(centerBrush, cx - 1.5f, cy - 1.5f, 3f, 3f);
+
+            g.ResetClip();
+
+            // Border ring
+            using var borderPen = new Pen(Color.FromArgb(80, 0, 200, 80), 0.6f);
+            g.DrawEllipse(borderPen, cx - radius, cy - radius, radius * 2, radius * 2);
+
+            return IconFromBitmap(bmp);
         }
         catch
         {
-            // Last resort: use SystemIcons which is always available.
             return SystemIcons.Application;
         }
+    }
+
+    /// <summary>
+    /// Converts a 32bpp ARGB bitmap to an Icon while preserving full alpha transparency
+    /// by embedding the PNG inside an ICO stream (supported on Vista+).
+    /// </summary>
+    private static Icon IconFromBitmap(Bitmap bmp)
+    {
+        using var pngStream = new System.IO.MemoryStream();
+        bmp.Save(pngStream, System.Drawing.Imaging.ImageFormat.Png);
+        byte[] png = pngStream.ToArray();
+
+        using var icoStream = new System.IO.MemoryStream();
+        using var bw = new System.IO.BinaryWriter(icoStream);
+
+        // ICONDIR
+        bw.Write((short)0);            // reserved
+        bw.Write((short)1);            // type: ICO
+        bw.Write((short)1);            // image count
+
+        // ICONDIRENTRY (16 bytes)
+        bw.Write((byte)bmp.Width);
+        bw.Write((byte)bmp.Height);
+        bw.Write((byte)0);             // color count (0 = >256)
+        bw.Write((byte)0);             // reserved
+        bw.Write((short)1);            // planes
+        bw.Write((short)32);           // bits per pixel
+        bw.Write((int)png.Length);     // image data size
+        bw.Write((int)22);             // offset: 6 (ICONDIR) + 16 (ICONDIRENTRY)
+
+        bw.Write(png);
+        bw.Flush();
+
+        icoStream.Position = 0;
+        return new Icon(icoStream);
     }
 
     public void Dispose()
